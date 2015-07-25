@@ -2,6 +2,7 @@
 
 void setup()
 {
+  Serial.begin(9600); 
   servo(1,58);
   delay(100);
   servo(2,85);
@@ -11,18 +12,8 @@ void setup()
 
 void loop()
 {
-   OK();// Wait for OK button
-  down(0);
-  delay(1000);
-  OK();// Wait for OK button
-  up(1);
-  delay(1000);
-  OK();// Wait for OK button
-  down(1);
-  delay(1000);
-  OK();// Wait for OK button
-  up(0);
-  delay(1000);
+   Serial.println(analogRead(A6));
+   delay(1000);
 }
 void up(int i){
   if(i==1){
