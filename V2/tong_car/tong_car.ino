@@ -1,12 +1,10 @@
 /* kkao start 13/11/15 */
 
-#define test  13       
-
   
-#define red   1   
-#define green 2   
-#define yellow 3   
-#define none  4
+#define red_color   1   
+#define green_color 2   
+#define yellow_color 3   
+#define none_color  4
 
 #define sampling_rate  50   
 
@@ -15,8 +13,7 @@
 #define S1  3                               
 #define S2  15                 
 #define S3  14                             
-#define taosOutPin  2                     
-#define LED  13      // no connection                       
+#define taosOutPin  2                                      
 
 //   						front	
 // IR line sensor pin  L 1 2 3 4 5 6 R
@@ -64,10 +61,20 @@ HMC5883L compass;
 float INput_a[6]={0};
 byte Multi_line = 0x00;
 float Object = 0;
-unsigned long i=0;
+unsigned long time = 0;
+
 float distance = 0;
 
+float OB_distance = 0;
 
+float heading_set = 0;
+float heading = 0;
+
+float error_LR;
+uint8_t IR_state;
+uint8_t color_can;
+
+int i;
 void setup()
 {
 	Serial.begin(115200);
@@ -79,44 +86,69 @@ void setup()
 	//this will put in 1:1, highest sensitivity of color sensor
     digitalWrite(S0, HIGH); //S0
     digitalWrite(S1, HIGH); //S1
-    pinMode(test, OUTPUT);
 
 
+    	Serial.println("start_cali ? ");
+	OK();
+    	Serial.println("start_cali begin");
+	int index = 200;
+	while (index > 0)
+	{
+		index -- ;
+		heading_set = Smooth_filter( getHeading(), heading_set);
+		delay(20);
+	}
+		Serial.println(heading_set);
+	 	Serial.println("start_cali end");
 
+	OK();
+    	Serial.println("start");
 
-
-
-	OK();// Wait for OK button
-	Timer1.initialize(1000000/sampling_rate); // set a timer of length 100000 microseconds (or 0.1 sec - or 10Hz => the led will blink 5 times, 5 cycles of on-and-off, per second)
-	Timer1.attachInterrupt( Sampling ); // attach the service routine here
+	// Timer1.initialize(20000); // set a timer of length 100000 microseconds (or 0.1 sec - or 10Hz => the led will blink 5 times, 5 cycles of on-and-off, per second)
+	// Timer1.attachInterrupt( Sampling ); // attach the service routine here
+    	time = millis();
 }
 
 void loop()
 {
-
-	delay(0xffff);
+	unsigned long time_tmp = millis();
+	if (time_tmp - time >= 20)
+	{
+		time = time_tmp;
+		Sampling();
+	}
+	// delay(1000);
 
 }
 
 void Sampling()
 {
 
-	Update_IR();
-	Serial.print(INput_a[0]); Serial.print("---");
-	Serial.print(INput_a[1]); Serial.print("---");
-	Serial.print(INput_a[2]); Serial.print("---");
-	Serial.print(INput_a[3]); Serial.print("---");
-	Serial.print(INput_a[4]); Serial.print("---");
-	Serial.print(INput_a[5]); Serial.println("---");
+	heading = getHeading() - heading_set;
 
+	// Update_encoder();
+	// // distance
+
+	// Update_IR(); 	
+	// // error_LR 
+	// // IR_state 
+
+	// color_can = colorRead(); // 0 not ready, 1 red, 2 yellow, 3 green, 4 none
+
+	// OB_distance = Update_object_distance();
+
+	// Serial.print(INput_a[0]); Serial.print("---");
+	// Serial.print(INput_a[1]); Serial.print("---");
+	// Serial.print(INput_a[2]); Serial.print("---");
+	// Serial.print(INput_a[3]); Serial.print("---");
+	// Serial.print(INput_a[4]); Serial.print("---");
+	Serial.println(heading);
+
+
+	// Motor_drive(0, 0);
+	// ARM_Move(); // 0 Down, 1 UP
 }
 
-float Update_mag()
-{
-	static float heading;
-	heading = Smooth_filter(getHeading(), heading);
-	return heading;
-}
 
 float Update_object_distance()
 {
@@ -177,7 +209,7 @@ void Update_encoder()
 
 void Update_IR()
 {
-	float error_LR;
+	float error_LR_tmp;
 	uint8_t IR_state_tmp;
 
 	INput_a[0] = Smooth_filter( (((float)analogRead(IR1) * 0.001f) - IR1_offset)/IR1_min, INput_a[0]);
@@ -187,8 +219,7 @@ void Update_IR()
 	INput_a[4] = Smooth_filter( (((float)analogRead(IR5) * 0.001f) - IR5_offset)/IR5_min, INput_a[4]);
 	INput_a[5] = Smooth_filter( (((float)analogRead(IR6) * 0.001f) - IR6_offset)/IR6_min, INput_a[4]);
 
-	error_LR =  3.0f*dead_band (0.3f, INput_a[0]) + 2.0f*dead_band (0.3f, INput_a[0]) + dead_band (0.3f, INput_a[0]) - \
-				dead_band (0.3f, INput_a[0]) - 2.0f*dead_band (0.3f, INput_a[0]) - 3.0f*dead_band (0.3f, INput_a[0]);
+	error_LR_tmp =  3.0f*dead_band (0.3f, INput_a[0]) + 2.0f*dead_band (0.3f, INput_a[0]) + dead_band (0.3f, INput_a[0]) - dead_band (0.3f, INput_a[0]) - 2.0f*dead_band (0.3f, INput_a[0]) - 3.0f*dead_band (0.3f, INput_a[0]);
 
 	for (byte x = 0 ; x < 6 ; x++)
 	{
@@ -203,9 +234,12 @@ void Update_IR()
 	}
 
 	/* update data here*/
+	error_LR = error_LR_tmp;
+	IR_state = IR_state_tmp;
+
 }
 
-int colorRead()
+int colorRead()// 0 not ready, 1 red, 2 yellow, 3 green, 4 none
 {/*
 	none      w:23 r:80 g:77 b:47
 	yellow    w:2 r:5 g:6 b:10
@@ -216,7 +250,7 @@ int colorRead()
  
 	static float white_tmp, red_tmp, blue_tmp, green_tmp;
 	static byte step;
-	static byte color; // 0 none, 1 red, 2 yellow, 3 green
+	static byte color; // 0 not ready, 1 red, 2 yellow, 3 green, 4 none
     // digitalWrite(LED, HIGH);
 
    	if(step == 0)
@@ -288,15 +322,15 @@ int colorRead()
 
     	if (white_tmp > 10) 
     	{
-    		return none;
+    		return none_color;
     	}else if (red_tmp > 13)
     	{
-    		return green;
+    		return green_color;
     	}else if(green_tmp > 13)
     	{
-    		return red;
+    		return red_color;
     	}else{
-    		return yellow;
+    		return yellow_color;
     	}
     }else{
 
