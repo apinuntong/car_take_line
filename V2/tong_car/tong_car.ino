@@ -5,18 +5,18 @@
   
 #define red   1   
 #define green 2   
-#define blue  3   
+#define yellow 3   
 #define none  4
 
 #define sampling_rate  50   
 
 // Color sensor pin 
 #define S0  13                               
-#define S1  14                               
+#define S1  3                               
 #define S2  15                 
-#define S3  3                             
+#define S3  14                             
 #define taosOutPin  2                     
-#define LED  13                           
+#define LED  13      // no connection                       
 
 //   						front	
 // IR line sensor pin  L 1 2 3 4 5 6 R
@@ -48,7 +48,10 @@
 #define servo_arm 7                               
 #define servo_hand 8        
 
+// Encoder 
+#define pluse2cm 1
 
+#define RAD_TO_DEG 57.27272727272727f
 
 #include <TimerOne.h>
 #include <ATX2.h>
@@ -56,12 +59,13 @@
 #include <Wire.h>
 #include <HMC5883L.h>
 
+
 HMC5883L compass;
 float INput_a[6]={0};
 byte Multi_line = 0x00;
 float Object = 0;
 unsigned long i=0;
-
+float distance = 0;
 
 
 void setup()
@@ -90,11 +94,13 @@ void setup()
 void loop()
 {
 
+	delay(0xffff);
+
 }
 
 void Sampling()
 {
-	digitalWrite(test, 1);
+
 	Update_IR();
 	Serial.print(INput_a[0]); Serial.print("---");
 	Serial.print(INput_a[1]); Serial.print("---");
@@ -102,7 +108,7 @@ void Sampling()
 	Serial.print(INput_a[3]); Serial.print("---");
 	Serial.print(INput_a[4]); Serial.print("---");
 	Serial.print(INput_a[5]); Serial.println("---");
-	digitalWrite(test, 0);
+
 }
 
 float Update_mag()
@@ -163,6 +169,12 @@ void ARM_Move() // 0 Down, 1 UP
 	}
 }
 
+void Update_encoder()
+{
+	distance += (float)encCnt*pluse2cm;
+	encCnt = 0;
+}
+
 void Update_IR()
 {
 	float error_LR;
@@ -178,7 +190,7 @@ void Update_IR()
 	error_LR =  3.0f*dead_band (0.3f, INput_a[0]) + 2.0f*dead_band (0.3f, INput_a[0]) + dead_band (0.3f, INput_a[0]) - \
 				dead_band (0.3f, INput_a[0]) - 2.0f*dead_band (0.3f, INput_a[0]) - 3.0f*dead_band (0.3f, INput_a[0]);
 
-	for (byte x = 0 : x < 6 : x++)
+	for (byte x = 0 ; x < 6 ; x++)
 	{
 		if (INput_a[0] > 0.5f)
 		{
@@ -205,7 +217,7 @@ int colorRead()
 	static float white_tmp, red_tmp, blue_tmp, green_tmp;
 	static byte step;
 	static byte color; // 0 none, 1 red, 2 yellow, 3 green
-    digitalWrite(LED, HIGH);
+    // digitalWrite(LED, HIGH);
 
    	if(step == 0)
    	{//white
@@ -263,7 +275,7 @@ int colorRead()
    		green_tmp = readPulse;
     }
     //power OFF mode-  LED off and both channels "low" 
-    digitalWrite(LED, LOW);
+    // digitalWrite(LED, LOW);
     digitalWrite(S0, LOW); //S0
     digitalWrite(S1, LOW); //S1
      
@@ -308,16 +320,18 @@ void setupHMC5883L(){
   if(error != 0) Serial.println(compass.GetErrorText(error)); //check if there is an error, and print if so
 }
 
-float getHeading(){
-  //Get the reading from the HMC5883L and calculate the heading
-  MagnetometerScaled scaled = compass.ReadScaledAxis(); //scaled values from compass.
-  float heading = atan2(scaled.YAxis, scaled.XAxis);
+float getHeading()
+{
+	static float heading;
+	//Get the reading from the HMC5883L and calculate the heading
+	MagnetometerScaled scaled = compass.ReadScaledAxis(); //scaled values from compass.
+	heading = Smooth_filter(atan2(scaled.YAxis, scaled.XAxis), heading);
 
 	// Correct for when signs are reversed.
 	//  if(heading < 0) heading += 2*PI;
 	//  if(heading > 2*PI) heading -= 2*PI;
 
-  return heading * RAD_TO_DEG; //radians to degrees
+	return heading * RAD_TO_DEG; //radians to degrees
 }
 
 float dead_band (float rank, float data)
