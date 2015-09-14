@@ -2,6 +2,12 @@
 
 #define test  13       
 
+  
+#define red   1   
+#define green 2   
+#define blue  3   
+#define none  4
+
 #define sampling_rate  50   
 
 // Color sensor pin 
@@ -159,7 +165,8 @@ void ARM_Move() // 0 Down, 1 UP
 
 void Update_IR()
 {
-	static float error_LR;
+	float error_LR;
+	uint8_t IR_state_tmp;
 
 	INput_a[0] = Smooth_filter( (((float)analogRead(IR1) * 0.001f) - IR1_offset)/IR1_min, INput_a[0]);
 	INput_a[1] = Smooth_filter( (((float)analogRead(IR2) * 0.001f) - IR2_offset)/IR2_min, INput_a[1]);
@@ -167,11 +174,35 @@ void Update_IR()
 	INput_a[3] = Smooth_filter( (((float)analogRead(IR4) * 0.001f) - IR4_offset)/IR4_min, INput_a[3]);
 	INput_a[4] = Smooth_filter( (((float)analogRead(IR5) * 0.001f) - IR5_offset)/IR5_min, INput_a[4]);
 	INput_a[5] = Smooth_filter( (((float)analogRead(IR6) * 0.001f) - IR6_offset)/IR6_min, INput_a[4]);
+
+	error_LR =  3.0f*dead_band (0.3f, INput_a[0]) + 2.0f*dead_band (0.3f, INput_a[0]) + dead_band (0.3f, INput_a[0]) - \
+				dead_band (0.3f, INput_a[0]) - 2.0f*dead_band (0.3f, INput_a[0]) - 3.0f*dead_band (0.3f, INput_a[0]);
+
+	for (byte x = 0 : x < 6 : x++)
+	{
+		if (INput_a[0] > 0.5f)
+		{
+			IR_state_tmp |= 1;
+		}else{
+			IR_state_tmp |= 0;
+		}
+
+		IR_state_tmp<<1;
+	}
+
+	/* update data here*/
 }
 
 int colorRead()
-{ 
-	static float white, red, blue, green;
+{/*
+	none      w:23 r:80 g:77 b:47
+	yellow    w:2 r:5 g:6 b:10
+	red       w:5 r:7 g:19 b:13
+	green     w:5 r:21 g:15 b:13
+
+*/
+ 
+	static float white_tmp, red_tmp, blue_tmp, green_tmp;
 	static byte step;
 	static byte color; // 0 none, 1 red, 2 yellow, 3 green
     digitalWrite(LED, HIGH);
@@ -214,22 +245,22 @@ int colorRead()
 
    	if(step == 0)
    	{//white
-   		white = readPulse;
+   		white_tmp = readPulse;
     }
 
     if(step == 1)
     {//red
-   		red = readPulse;
+   		red_tmp = readPulse;
     }
 
     if(step == 2)
     {//blue
-   		blue = readPulse;
+   		blue_tmp = readPulse;
     }
 
     if(step == 3)
     {//green
-   		green = readPulse;
+   		green_tmp = readPulse;
     }
     //power OFF mode-  LED off and both channels "low" 
     digitalWrite(LED, LOW);
@@ -240,12 +271,24 @@ int colorRead()
 
     if (step == 4)
     {
-    	byte temp = 0;
-    	step = 0;
+    	byte temp = 0; // sent data out 
+    	step = 0;		// reset step
 
-    	return temp;
+    	if (white_tmp > 10) 
+    	{
+    		return none;
+    	}else if (red_tmp > 13)
+    	{
+    		return green;
+    	}else if(green_tmp > 13)
+    	{
+    		return red;
+    	}else{
+    		return yellow;
+    	}
     }else{
-        return 0;
+
+    	return 0;
     }
  }
 
@@ -275,4 +318,14 @@ float getHeading(){
 	//  if(heading > 2*PI) heading -= 2*PI;
 
   return heading * RAD_TO_DEG; //radians to degrees
+}
+
+float dead_band (float rank, float data)
+{
+	if ((data >= rank)||(data <= -rank))
+	{
+		return data;
+	}else{
+		return 0;		
+	}
 }
