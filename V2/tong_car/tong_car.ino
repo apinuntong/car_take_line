@@ -79,7 +79,7 @@ void setup()
 {
 	Serial.begin(115200);
 	encoder();
-
+        Wire.begin();
 	compass = HMC5883L(); //new instance of HMC5883L library
   	setupHMC5883L(); //setup the HMC5883L
 
@@ -347,7 +347,7 @@ float Smooth_filter(float new_data, float old_data)
 void setupHMC5883L(){
   //Setup the HMC5883L, and check for errors
   int error;  
-  error = compass.SetScale(1.3); //Set the scale of the compass.
+  error = compass.SetScale(0.88); //Set the scale of the compass.
   if(error != 0) Serial.println(compass.GetErrorText(error)); //check if there is an error, and print if so
 
   error = compass.SetMeasurementMode(Measurement_Continuous); // Set the measurement mode to Continuous
