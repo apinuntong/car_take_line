@@ -46,7 +46,7 @@
 #define servo_hand 8        
 
 // Encoder 
-#define pluse2cm 1
+#define pluse2cm 0.567f
 
 #define RAD_TO_DEG 57.27272727272727f
 
@@ -89,17 +89,17 @@ void setup()
 
 
     	Serial.println("start_cali ? ");
-	OK();
-    	Serial.println("start_cali begin");
-	int index = 200;
-	while (index > 0)
-	{
-		index -- ;
-		heading_set = Smooth_filter( getHeading(), heading_set);
-		delay(20);
-	}
-		Serial.println(heading_set);
-	 	Serial.println("start_cali end");
+//	OK();
+//    	Serial.println("start_cali begin");
+//	int index = 200;
+//	while (index > 0)
+//	{
+//		index -- ;
+//		heading_set = Smooth_filter( getHeading(), heading_set);
+//		delay(20);
+//	}
+//		Serial.println(heading_set);
+//	 	Serial.println("start_cali end");
 
 	OK();
     	Serial.println("start");
@@ -126,7 +126,7 @@ void Sampling()
 
 	heading = getHeading() - heading_set;
 
-	// Update_encoder();
+	 Update_encoder();
 	// // distance
 
 	// Update_IR(); 	
@@ -145,7 +145,7 @@ void Sampling()
 	Serial.println(heading);
 
 
-	// Motor_drive(0, 0);
+	 Motor_drive(30,20);
 	// ARM_Move(); // 0 Down, 1 UP
 }
 
@@ -157,14 +157,15 @@ float Update_object_distance()
 	return Object;
 }
 
-void Motor_drive(float FW, float LR)
+void Motor_drive(float FW, float distance_2 )
 {
-
-
-
-
-	fd2(0, 0);
-    AO();
+  if(distance_2>distance){
+    FD(FW);
+    //fd2(FW,FW);
+  }else{
+     AO();
+     //distance=0;
+  }   
 }
 
 void ARM_Move() // 0 Down, 1 UP
