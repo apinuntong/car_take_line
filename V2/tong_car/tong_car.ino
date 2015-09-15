@@ -1,6 +1,26 @@
 /* kkao start 13/11/15 */
 
-  
+#define MAX_Acceleration  	50 // speed per sec^2
+
+#define Deacc_length      	10 //  cm
+
+#define fiction_speed 		20 	 // speed 
+
+
+/*   	PID tracking line */
+
+#define Kp_line 20   
+#define Kd_line 0.0f  
+#define Ki_line 0.0f    
+
+/*  	PID tracking turn */
+#define tracking_angle 		5 	 
+
+#define Kp_turn 1   
+#define Kd_turn 0.0f   
+#define Ki_turn 0.0f  
+
+/*		pin setting */ 
 #define red_color   1   
 #define green_color 2   
 #define yellow_color 3   
@@ -70,9 +90,12 @@ float OB_distance = 0;
 float heading_set = 0;
 float heading = 0;
 
-float error_LR;
-uint8_t IR_state;
-uint8_t color_can;
+float Max_speed = 0;
+
+float error_LR = 0;
+uint8_t IR_state = 0;
+uint8_t Lines_count = 0;
+uint8_t color_can = 0;
 
 int i;
 void setup()
@@ -86,20 +109,21 @@ void setup()
 	//this will put in 1:1, highest sensitivity of color sensor
     digitalWrite(S0, HIGH); //S0
     digitalWrite(S1, HIGH); //S1
+    Max_speed = 100;
 
-
-    	Serial.println("start_cali ? ");
-//	OK();
-//    	Serial.println("start_cali begin");
-//	int index = 200;
-//	while (index > 0)
-//	{
-//		index -- ;
-//		heading_set = Smooth_filter( getHeading(), heading_set);
-//		delay(20);
-//	}
-//		Serial.println(heading_set);
-//	 	Serial.println("start_cali end");
+    Serial.println("start_cali ? ");
+	OK();
+ 	Serial.println("start_cali begin");
+	int index = 200;
+	while (index > 0)
+	{
+		index -- ;
+		heading_set = Smooth_filter( getHeading(), heading_set); // reading start angle
+		Max_speed = Smooth_filter(knob()/10.0f, Max_speed);				// reading max speed
+		delay(20);
+	}
+		Serial.println(heading_set);
+	 	Serial.println("start_cali end");
 
 	OK();
     	Serial.println("start");
@@ -126,10 +150,10 @@ void Sampling()
 
 	heading = getHeading() - heading_set;
 
-	 Update_encoder();
+	Update_encoder();
 	// // distance
 
-	// Update_IR(); 	
+	Update_IR(); 	
 	// // error_LR 
 	// // IR_state 
 
@@ -137,15 +161,21 @@ void Sampling()
 
 	// OB_distance = Update_object_distance();
 
-	// Serial.print(INput_a[0]); Serial.print("---");
-	// Serial.print(INput_a[1]); Serial.print("---");
-	// Serial.print(INput_a[2]); Serial.print("---");
-	// Serial.print(INput_a[3]); Serial.print("---");
-	// Serial.print(INput_a[4]); Serial.print("---");
+	Serial.print(INput_a[0]); Serial.print("---");
+	Serial.print(INput_a[1]); Serial.print("---");
+	Serial.print(INput_a[2]); Serial.print("---");
+	Serial.print(INput_a[3]); Serial.print("---");
+	Serial.print(INput_a[4]); Serial.print("---");
+	Serial.print(INput_a[5]); Serial.print("---");
+	Serial.print(error_LR); Serial.print("---");
+	Serial.print(distance); Serial.print("---");
+	Serial.print(Max_speed); Serial.print("---");
 	Serial.println(heading);
+		
 
 
-	 Motor_drive(30,20);
+	Motor_drive(200);
+
 	// ARM_Move(); // 0 Down, 1 UP
 }
 
@@ -157,15 +187,77 @@ float Update_object_distance()
 	return Object;
 }
 
-void Motor_drive(float FW, float distance_2 )
+uint8_t Motor_drive(float distance_ref )
 {
-  if(distance_2>distance){
-    FD(FW);
-    //fd2(FW,FW);
-  }else{
-     AO();
-     //distance=0;
-  }   
+	static uint8_t start; 
+	static float _main_speed;
+	static float error_LR_tmp;
+	static float dot_error_LR_tmp;
+	static float sum_error_LR_tmp;
+	uint8_t success = 0 ;
+
+	float error_distance = distance_ref - distance;
+
+	if(start = 0)
+	{
+		_main_speed = fiction_speed;  // beginning speed
+		start = 1;			          // disable beginning
+		error_LR_tmp = 0;			  // reset data
+		sum_error_LR_tmp = 0;
+		dot_error_LR_tmp = 0;
+	} 
+ 	
+ 	if ( error_distance > Deacc_length)
+ 	{
+
+ 		_main_speed += MAX_Acceleration / 50.0f;
+
+ 	}else{
+
+ 		_main_speed = (Max_speed * (error_distance / Deacc_length)) + fiction_speed;
+
+ 	}
+
+ 	if(_main_speed > Max_speed)  _main_speed = Max_speed ;  
+
+ 	if(error_distance <= 0)
+ 	{
+
+ 		_main_speed = 0 ;  
+ 		start = 0;
+ 		success = 1;
+
+ 	} 
+
+ 	/* PID Tracking Line*/
+
+ 	float u_LR_tmp = 0;
+
+ 	if ((success == 0) && (Lines_count <= 1))
+ 	{
+	 	dot_error_LR_tmp = Smooth_filter((error_LR - error_LR_tmp) * sampling_rate, dot_error_LR_tmp);
+	 	sum_error_LR_tmp += Smooth_filter(error_LR / sampling_rate, sum_error_LR_tmp);
+
+	 	u_LR_tmp = (Kp_line * error_LR) + (Kd_line * dot_error_LR_tmp) + (Ki_line * sum_error_LR_tmp);
+
+	 	error_LR_tmp = error_LR;
+	 } 
+
+	if (heading <  -tracking_angle && u_LR_tmp > 0) u_LR_tmp = 0;
+
+	if (heading >   tracking_angle && u_LR_tmp < 0) u_LR_tmp = 0;
+
+ 	float L_speed = _main_speed - u_LR_tmp;
+ 	float R_speed = _main_speed + u_LR_tmp;
+ 	
+
+ 	if (L_speed > 100) L_speed = 100;
+ 	if (R_speed > 100) R_speed = 100;
+ 	if (L_speed < 0) L_speed = 0;
+  	if (R_speed < 0) R_speed = 0;
+
+	FD2(L_speed, R_speed);
+ 	return success;
 }
 
 void ARM_Move() // 0 Down, 1 UP
@@ -210,9 +302,9 @@ void Update_encoder()
 
 void Update_IR()
 {
-	float error_LR_tmp;
-	uint8_t IR_state_tmp;
-
+	float error_LR_tmp = 0;
+	int8_t IR_state_tmp = 0;
+	int8_t Lines_count_tmp = 0;
 	INput_a[0] = Smooth_filter( (((float)analogRead(IR1) * 0.001f) - IR1_offset)/IR1_min, INput_a[0]);
 	INput_a[1] = Smooth_filter( (((float)analogRead(IR2) * 0.001f) - IR2_offset)/IR2_min, INput_a[1]);
 	INput_a[2] = Smooth_filter( (((float)analogRead(IR3) * 0.001f) - IR3_offset)/IR3_min, INput_a[2]);
@@ -220,23 +312,26 @@ void Update_IR()
 	INput_a[4] = Smooth_filter( (((float)analogRead(IR5) * 0.001f) - IR5_offset)/IR5_min, INput_a[4]);
 	INput_a[5] = Smooth_filter( (((float)analogRead(IR6) * 0.001f) - IR6_offset)/IR6_min, INput_a[4]);
 
-	error_LR_tmp =  3.0f*dead_band (0.3f, INput_a[0]) + 2.0f*dead_band (0.3f, INput_a[0]) + dead_band (0.3f, INput_a[0]) - dead_band (0.3f, INput_a[0]) - 2.0f*dead_band (0.3f, INput_a[0]) - 3.0f*dead_band (0.3f, INput_a[0]);
+	error_LR_tmp =  3.0f*dead_band (0.3f, INput_a[0]) + 2.0f*dead_band (0.3f, INput_a[1]) + 
+					     dead_band (0.3f, INput_a[2]) - dead_band (0.3f, INput_a[3]) - 
+					2.0f*dead_band (0.3f, INput_a[4]) - 3.0f*dead_band (0.3f, INput_a[5]);
 
 	for (byte x = 0 ; x < 6 ; x++)
 	{
-		if (INput_a[0] > 0.5f)
+		if (INput_a[x] > 0.5f)
 		{
 			IR_state_tmp |= 1;
+			Lines_count_tmp++;
 		}else{
 			IR_state_tmp |= 0;
 		}
-
-		IR_state_tmp<<1;
+		IR_state_tmp = IR_state_tmp<<1;
 	}
 
 	/* update data here*/
 	error_LR = error_LR_tmp;
 	IR_state = IR_state_tmp;
+	Lines_count = Lines_count_tmp;
 
 }
 
